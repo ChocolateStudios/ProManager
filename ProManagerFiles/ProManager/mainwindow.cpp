@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 
 #include <QtWidgets>
+#include "word/word.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -231,7 +232,24 @@ bool MainWindow::saveAs()
 
 void MainWindow::download()
 {
-    QMessageBox::information(this, QCoreApplication::applicationName(), tr("Downloading..."));
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Download"), QFileInfo(curFile).baseName() + ".docx");
+    if (fileName.isEmpty())
+        return;
+    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+
+    // Open Word Application and create new document
+    OfficeLib::Word::Word word;
+    OfficeLib::Word::Document doc = word.createDocument();
+
+    // Write text
+    doc.writeText(textEdit->document()->toPlainText());
+
+    // Save and close document and Word Application
+    doc.saveAs(fileName);
+    doc.close();
+    word.quit();
+
+    QGuiApplication::restoreOverrideCursor();
 }
 
 void MainWindow::updateRecentFileActions()

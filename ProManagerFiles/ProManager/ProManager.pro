@@ -2,7 +2,7 @@ QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
-CONFIG += c++11
+CONFIG += c++11 qaxcontainer
 
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
@@ -22,3 +22,8 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 RESOURCES += \
     ProManager.qrc
+
+# Linking to OfficeLibrary
+INCLUDEPATH += $$PWD/../../CustomQtOfficeLibraryFiles/CustomQtOfficeLibrary
+DEPENDPATH += $$PWD/../../CustomQtOfficeLibraryFiles/CustomQtOfficeLibrary
+LIBS += -L$$PWD/../../CustomQtOfficeLibraryFiles/build-CustomQtOfficeLibrary-Desktop_Qt_6_1_2_MSVC2019_64bit-Debug/debug/ -lCustomQtOfficeLibrary
