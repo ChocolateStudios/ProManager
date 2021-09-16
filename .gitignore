@@ -71,3 +71,5 @@ Thumbs.db
 *.dll
 *.exe
 
+# Build folders
+ProManagerFiles/build-ProManager-Desktop_Qt_6_1_2_MSVC2019_64bit-Debug
