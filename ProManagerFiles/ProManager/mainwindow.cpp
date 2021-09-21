@@ -1,7 +1,11 @@
 #include "mainwindow.h"
+#include "word/word.h"
+#include "customtextedit.h"
+#include "style.h"
+#include "customaction.h"
+#include "customcolorfontdialog.h"
 
 #include <QtWidgets>
-#include "word/word.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -98,7 +102,7 @@ void MainWindow::loadFile(const QString &fileName)
     statusBar()->showMessage(tr("File loaded"), 2000);
 }
 
-void MainWindow::setRecentFilesVisible(bool visible)
+void MainWindow::setRecentFilesVisible(const bool &visible)
 {
     recentFileSubMenuAct->setVisible(visible);
     recentFileSeparator->setVisible(visible);
@@ -242,7 +246,7 @@ void MainWindow::download()
     OfficeLib::Word::Document doc = word.createDocument();
 
     // Write text
-    doc.writeText(textEdit->document()->toPlainText());
+    textEdit->writeToWord(doc, styles);
 
     // Save and close document and Word Application
     doc.saveAs(fileName);
@@ -285,62 +289,198 @@ void MainWindow::documentWasModified()
     setWindowModified(true);
 }
 
+void MainWindow::customContextMenuRequested()
+{
+    customContextMenu->popup(QWidget::mapToGlobal(QPoint(textEdit->cursorRect().right() + 15,textEdit->cursorRect().bottom() + 60)));
+}
+
+void MainWindow::selectStyleIconColor()
+{
+    if (QToolButton* btn = qobject_cast<QToolButton*>(sender())) {
+        QColor c = QColorDialog::getColor();
+        btn->setStyleSheet("border: 1px solid black; background-color: " + c.name() + ";");
+        styles.last().setIconColor(c);
+    }
+}
+
+void MainWindow::selectStyleFont()
+{
+    if (QPushButton* btn = qobject_cast<QPushButton*>(sender())) {
+        bool ok = false;
+        QFont font = QFontDialog::getFont(&ok);
+
+        if (ok) {
+//            qDebug() << font.family();
+//            qDebug() << font.pointSize();
+//            qDebug() << font.pointSizeF();
+//            qDebug() << font.style();
+            styles.last().setFont(font);
+        }
+    }
+}
+
+void MainWindow::selectStyleFontColor()
+{
+    if (QToolButton* btn = qobject_cast<QToolButton*>(sender())) {
+        OfficeLib::Word::WdColor c = CustomColorFontDialog::getColor();
+        QColor c2 = Qt::red;
+        btn->setStyleSheet("border: 1px solid black; background-color: " + c2.name() + ";");
+        styles.last().fontColor = c;
+    }
+}
+
+void MainWindow::addStyleToCustomContextMenu()
+{
+    if (QPushButton* btn = qobject_cast<QPushButton*>(sender())) {
+        if (QLineEdit* ledit = qobject_cast<QLineEdit*>(btn->parent()->children().at(2))) {
+            for (Style &s : styles) {
+                if (s.getName() == ledit->text())
+                    return;
+            }
+
+            styles.last().setName(ledit->text());
+
+            CustomAction* newAct = new CustomAction(styles.last());
+            newAct->setEnabled(!textEdit->textCursor().selectedText().isEmpty());
+
+            connect(newAct, &QAction::triggered, textEdit, &CustomTextEdit::setTextSelectedColor);
+            connect(textEdit, &QTextEdit::copyAvailable, newAct, &QAction::setEnabled);
+
+            customContextMenu->addAction(newAct);
+
+            ledit->clear();
+            btn->parent()->parent()->setProperty("visible", false);
+            styles.append(Style());
+
+            if (!textEdit->textCursor().selectedText().isEmpty())
+                emit newAct->triggered();
+        }
+    }
+}
+
 void MainWindow::init()
 {
     setAttribute(Qt::WA_DeleteOnClose);
     isUntitled = true;
-    textEdit = new QTextEdit;
+    textEdit = new CustomTextEdit;
     setCentralWidget(textEdit);
+
+    styles.append(Style());
+    textEdit->styles = &styles;
+
     createActions();
+    createMenus();
+    createToolBars();
     createStatusBar();
+    createDockWindows();
+    createContextMenu();
+    createCustomContextMenu();
     readSettings();
     connect(textEdit->document(), &QTextDocument::contentsChanged, this, &MainWindow::documentWasModified);
     setUnifiedTitleAndToolBarOnMac(true);
+
+    textEdit->initTest();
+//    textEdit->test("AL INICIO JEJE     ", styles);
 }
 
 void MainWindow::createActions()
 {
-    QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
-    QToolBar *fileToolBar = addToolBar(tr("File"));
-
     const QIcon newIcon = QIcon::fromTheme("document-new", QIcon(":/images/new.png"));
-    QAction *newAct = new QAction(newIcon, tr("&New"), this);
+    newAct = new QAction(newIcon, tr("&New"), this);
     newAct->setShortcuts(QKeySequence::New);
     newAct->setStatusTip(tr("Create a new file"));
     connect(newAct, &QAction::triggered, this, &MainWindow::newFile);
-    fileMenu->addAction(newAct);
-    fileToolBar->addAction(newAct);
 
     const QIcon openIcon = QIcon::fromTheme("document-open", QIcon(":/images/open.png"));
-    QAction *openAct = new QAction(openIcon, tr("&Open..."), this);
+    openAct = new QAction(openIcon, tr("&Open..."), this);
     openAct->setShortcuts(QKeySequence::Open);
     openAct->setStatusTip(tr("Open an existing file"));
     connect(openAct, &QAction::triggered, this, &MainWindow::open);
-    fileMenu->addAction(openAct);
-    fileToolBar->addAction(openAct);
 
     const QIcon saveIcon = QIcon::fromTheme("document-save", QIcon(":/images/save.png"));
-    QAction *saveAct = new QAction(saveIcon, tr("&Save"), this);
+    saveAct = new QAction(saveIcon, tr("&Save"), this);
     saveAct->setShortcuts(QKeySequence::Save);
     saveAct->setStatusTip(tr("Save the document to disk"));
     connect(saveAct, &QAction::triggered, this, &MainWindow::save);
-    fileMenu->addAction(saveAct);
-    fileToolBar->addAction(saveAct);
 
     const QIcon saveAsIcon = QIcon::fromTheme("document-save-as");
-    QAction *saveAsAct = fileMenu->addAction(saveAsIcon, tr("Save &As..."), this, &MainWindow::saveAs);
+    saveAsAct = new QAction(saveAsIcon, tr("Save &As..."), this);
     saveAsAct->setShortcuts(QKeySequence::SaveAs);
     saveAsAct->setStatusTip(tr("Save the document under a new name"));
+    connect(saveAsAct, &QAction::triggered, this, &MainWindow::saveAs);
+
 
     const QIcon downloadIcon = QIcon::fromTheme("document-download", QIcon(":/images/download.png"));
-    QAction *downloadAct = new QAction(downloadIcon, tr("&Download"), this);
+    downloadAct = new QAction(downloadIcon, tr("&Download"), this);
 #ifdef Q_OS_WINDOWS
     downloadAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
 #endif
     downloadAct->setStatusTip(tr("Download the document in the specified path"));
     connect(downloadAct, &QAction::triggered, this, &MainWindow::download);
+
+    const QIcon closeIcon = QIcon::fromTheme("application-close");
+    closeAct = new QAction(closeIcon, tr("Close"), this);
+    closeAct->setShortcut(tr("Ctrl+W"));
+    closeAct->setStatusTip(tr("Close this window"));
+    connect(closeAct, &QAction::triggered, this, &QWidget::close);
+
+    const QIcon exitIcon = QIcon::fromTheme("application-exit");
+    exitAct = new QAction(exitIcon, tr("E&xit"), this);
+    exitAct->setShortcuts(QKeySequence::Quit);
+    exitAct->setStatusTip(tr("Exit the application"));
+    connect(exitAct, &QAction::triggered, qApp, &QApplication::quit);
+
+
+#ifndef QT_NO_CLIPBOARD
+    const QIcon cutIcon = QIcon::fromTheme("edit-cut", QIcon(":/images/cut.png"));
+    cutAct = new QAction(cutIcon, tr("Cu&t"), this);
+    cutAct->setShortcuts(QKeySequence::Cut);
+    cutAct->setStatusTip(tr("Cut the current selection's contents to the clipboard"));
+    connect(cutAct, &QAction::triggered, textEdit, &QTextEdit::cut);
+
+    const QIcon copyIcon = QIcon::fromTheme("edit-copy", QIcon(":/images/copy.png"));
+    copyAct = new QAction(copyIcon, tr("&Copy"), this);
+    copyAct->setShortcuts(QKeySequence::Copy);
+    copyAct->setStatusTip(tr("Copy the current selection's contents to the clipboard"));
+    connect(copyAct, &QAction::triggered, textEdit, &QTextEdit::copy);
+
+    const QIcon pasteIcon = QIcon::fromTheme("edit-paste", QIcon(":/images/paste.png"));
+    pasteAct = new QAction(pasteIcon, tr("&Paste"), this);
+    pasteAct->setShortcuts(QKeySequence::Paste);
+    pasteAct->setStatusTip(tr("Paste the clipboard's contents into the current selection"));
+    connect(pasteAct, &QAction::triggered, textEdit, &QTextEdit::paste);
+
+    cutAct->setEnabled(false);
+    copyAct->setEnabled(false);
+    connect(textEdit, &QTextEdit::copyAvailable, cutAct, &QAction::setEnabled);
+    connect(textEdit, &QTextEdit::copyAvailable, copyAct, &QAction::setEnabled);
+#endif // !QT_NO_CLIPBOARD
+
+    const QIcon resetSelectedTextFormatIcon = QIcon(":/images/reset-format.png");
+    resetSelectedTextFormatAct = new QAction(resetSelectedTextFormatIcon, tr("&Reset Format"), this);
+    resetSelectedTextFormatAct->setStatusTip(tr("Reset selected text format"));
+    connect(resetSelectedTextFormatAct, &QAction::triggered, textEdit, &CustomTextEdit::resetSelectedTextFormat);
+//    connect(resetSelectedTextFormatAct, &QAction::triggered, textEdit, &CustomTextEdit::test);
+    resetSelectedTextFormatAct->setEnabled(false);
+    connect(textEdit, &QTextEdit::copyAvailable, resetSelectedTextFormatAct, &QAction::setEnabled);
+
+    const QIcon showStylesMenuIcon = QIcon(":/images/styles-menu.png");
+    showStylesMenuAct = new QAction(showStylesMenuIcon, tr("Show Style Menu"), this);
+    showStylesMenuAct->setShortcut(Qt::CTRL | Qt::Key_Space);
+    showStylesMenuAct->setStatusTip(tr("Show a menu with styles options"));
+    connect(showStylesMenuAct, &QAction::triggered, this, &MainWindow::customContextMenuRequested);
+}
+
+void MainWindow::createMenus()
+{
+    QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
+    fileMenu->addAction(newAct);
+    fileMenu->addAction(openAct);
+    fileMenu->addAction(saveAct);
+    fileMenu->addAction(saveAsAct);
+#ifdef Q_OS_WINDOWS
     fileMenu->addAction(downloadAct);
-    fileToolBar->addAction(downloadAct);
+#endif
 
     fileMenu->addSeparator();
 
@@ -357,65 +497,120 @@ void MainWindow::createActions()
 
     setRecentFilesVisible(MainWindow::hasRecentFiles());
 
-    QAction *closeAct = fileMenu->addAction(tr("&Close"), this, &QWidget::close);
-    closeAct->setShortcut(tr("Ctrl+W"));
-    closeAct->setStatusTip(tr("Close this window"));
-
-    const QIcon exitIcon = QIcon::fromTheme("application-exit");
-    QAction *exitAct = fileMenu->addAction(exitIcon, tr("E&xit"), qApp, &QApplication::quit);
-    exitAct->setShortcuts(QKeySequence::Quit);
-    exitAct->setStatusTip(tr("Exit the application"));
+    fileMenu->addAction(closeAct);
+    fileMenu->addAction(exitAct);
 
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
-    QToolBar *editToolBar = addToolBar(tr("Edit"));
-
 #ifndef QT_NO_CLIPBOARD
-    const QIcon cutIcon = QIcon::fromTheme("edit-cut", QIcon(":/images/cut.png"));
-    QAction *cutAct = new QAction(cutIcon, tr("Cu&t"), this);
-    cutAct->setShortcuts(QKeySequence::Cut);
-    cutAct->setStatusTip(tr("Cut the current selection's contents to the clipboard"));
-    connect(cutAct, &QAction::triggered, textEdit, &QTextEdit::cut);
     editMenu->addAction(cutAct);
-    editToolBar->addAction(cutAct);
-
-    const QIcon copyIcon = QIcon::fromTheme("edit-copy", QIcon(":/images/copy.png"));
-    QAction *copyAct = new QAction(copyIcon, tr("&Copy"), this);
-    copyAct->setShortcuts(QKeySequence::Copy);
-    copyAct->setStatusTip(tr("Copy the current selection's contents to the clipboard"));
-    connect(copyAct, &QAction::triggered, textEdit, &QTextEdit::copy);
     editMenu->addAction(copyAct);
-    editToolBar->addAction(copyAct);
-
-    const QIcon pasteIcon = QIcon::fromTheme("edit-paste", QIcon(":/images/paste.png"));
-    QAction *pasteAct = new QAction(pasteIcon, tr("&Paste"), this);
-    pasteAct->setShortcuts(QKeySequence::Paste);
-    pasteAct->setStatusTip(tr("Paste the clipboard's contents into the current selection"));
-    connect(pasteAct, &QAction::triggered, textEdit, &QTextEdit::paste);
     editMenu->addAction(pasteAct);
-    editToolBar->addAction(pasteAct);
+#endif
+    editMenu->addAction(resetSelectedTextFormatAct);
+    editMenu->addAction(showStylesMenuAct);
+
+    viewMenu = menuBar()->addMenu(tr("&View"));
 
     menuBar()->addSeparator();
-#endif // !QT_NO_CLIPBOARD
 
     QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
-
     QAction *aboutAct = helpMenu->addAction(tr("&About"), this, &MainWindow::about);
     aboutAct->setStatusTip(tr("Show the application's About box"));
 
     QAction *aboutQtAct = helpMenu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
     aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
+}
 
+void MainWindow::createToolBars()
+{
+    QToolBar *fileToolBar = addToolBar(tr("File"));
+    fileToolBar->addAction(newAct);
+    fileToolBar->addAction(openAct);
+    fileToolBar->addAction(saveAct);
+    fileToolBar->addAction(downloadAct);
+
+    QToolBar *editToolBar = addToolBar(tr("Edit"));
 #ifndef QT_NO_CLIPBOARD
-    cutAct->setEnabled(false);
-    copyAct->setEnabled(false);
-    connect(textEdit, &QTextEdit::copyAvailable, cutAct, &QAction::setEnabled);
-    connect(textEdit, &QTextEdit::copyAvailable, copyAct, &QAction::setEnabled);
-#endif // !QT_NO_CLIPBOARD
+    editToolBar->addAction(cutAct);
+    editToolBar->addAction(copyAct);
+    editToolBar->addAction(pasteAct);
+#endif
+    editToolBar->addAction(resetSelectedTextFormatAct);
+    editToolBar->addAction(showStylesMenuAct);
 }
 
 void MainWindow::createStatusBar()
 {
     statusBar()->showMessage(tr("Ready"));
+}
+
+void MainWindow::createDockWindows()
+{
+    QDockWidget* createStyleDock = new QDockWidget(tr("Create New Style"), this);
+
+    QWidget* widget = new QWidget(createStyleDock);
+    QVBoxLayout* layout = new QVBoxLayout;
+
+    QLabel* styleNameLabel = new QLabel(tr("Style Name"));
+    QLineEdit* styleNameLEdit = new QLineEdit;
+
+    QHBoxLayout* rectColorLayout = new QHBoxLayout;
+    QLabel* rectColorLabel = new QLabel(tr("Style Color"));
+    QToolButton* rectColorBtn = new QToolButton();
+
+    QVBoxLayout* fontPropsLayout = new QVBoxLayout;
+    QLabel* fontLabel = new QLabel(tr("Font Properties"));
+    QHBoxLayout* fontOptionsLayout = new QHBoxLayout;
+    QPushButton* fontBtn = new QPushButton(tr("Font"));
+    QToolButton* rectFontColorBtn = new QToolButton();
+
+    QPushButton* createStyleBtn = new QPushButton("Create");
+
+    connect(rectColorBtn, &QToolButton::clicked, this, &MainWindow::selectStyleIconColor);
+    connect(fontBtn, &QPushButton::clicked, this, &MainWindow::selectStyleFont);
+    connect(rectFontColorBtn, &QPushButton::clicked, this, &MainWindow::selectStyleFontColor);
+    connect(createStyleBtn, &QPushButton::clicked, this, &MainWindow::addStyleToCustomContextMenu);
+
+    layout->addWidget(styleNameLabel);
+    layout->addWidget(styleNameLEdit);
+
+    rectColorLayout->addWidget(rectColorLabel);
+    rectColorLayout->addWidget(rectColorBtn);
+    layout->addLayout(rectColorLayout);
+
+    layout->addStretch(1);
+
+    fontPropsLayout->addWidget(fontLabel);
+    fontOptionsLayout->addWidget(fontBtn);
+    fontOptionsLayout->addWidget(rectFontColorBtn);
+    fontPropsLayout->addLayout(fontOptionsLayout);
+    layout->addLayout(fontPropsLayout);
+
+    layout->addStretch(5);
+
+    layout->addWidget(createStyleBtn);
+    widget->setLayout(layout);
+
+    createStyleDock->setWidget(widget);
+    createStyleDock->setVisible(false);
+    addStyleAct = createStyleDock->toggleViewAction();
+    addDockWidget(Qt::RightDockWidgetArea, createStyleDock);
+    viewMenu->addAction(createStyleDock->toggleViewAction());
+}
+
+void MainWindow::createContextMenu()
+{
+//    QAction* actionName;
+//    textEdit->addAction(actionName);
+//    textEdit->setContextMenuPolicy(Qt::ActionsContextMenu);
+}
+
+void MainWindow::createCustomContextMenu()
+{
+    customContextMenu = new QMenu(this);
+    addStyleAct->setIcon(QIcon(":/images/plus.png"));
+    customContextMenu->addAction(addStyleAct);
+    customContextMenu->addSeparator();
 }
 
 void MainWindow::readSettings()

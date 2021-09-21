@@ -3,8 +3,10 @@
 
 #include <QMainWindow>
 
-class QTextEdit;
+class CustomTextEdit;
 class QAction;
+class QLineEdit;
+class Style;
 
 class MainWindow : public QMainWindow
 {
@@ -29,13 +31,23 @@ private slots:
     void openRecentFile();
     void about();
     void documentWasModified();
+    void customContextMenuRequested();
+    void selectStyleIconColor();
+    void selectStyleFont();
+    void selectStyleFontColor();
+    void addStyleToCustomContextMenu();
 
 private:
     enum { MaxRecentFiles = 5 };
 
     void init();
     void createActions();
+    void createMenus();
+    void createToolBars();
     void createStatusBar();
+    void createDockWindows();
+    void createContextMenu();
+    void createCustomContextMenu();
     void readSettings();
     void writeSettings();
     bool maybeSave();
@@ -43,17 +55,36 @@ private:
     void loadFile(const QString& fileName);
     static bool hasRecentFiles();
     void prependToRecentFiles(const QString& fileName);
-    void setRecentFilesVisible(bool visible);
+    void setRecentFilesVisible(const bool& visible);
     bool saveFile(const QString& fileName);
     void setCurrentFile(const QString& fileName);
     static QString strippedName(const QString& fullFileName);
     MainWindow *findMainWindow(const QString& fileName) const;
 
-    QTextEdit *textEdit;
+    CustomTextEdit *textEdit;
 
     QAction* recentFileActs[MaxRecentFiles];
     QAction* recentFileSeparator;
     QAction* recentFileSubMenuAct;
+
+    QAction *newAct;
+    QAction *openAct;
+    QAction *saveAct;
+    QAction *saveAsAct;
+    QAction *downloadAct;
+    QAction *closeAct;
+    QAction *exitAct;
+    QAction *cutAct;
+    QAction *copyAct;
+    QAction *pasteAct;
+    QAction *resetSelectedTextFormatAct;
+    QAction *showStylesMenuAct;
+    QAction *addStyleAct;
+
+    QMenu* customContextMenu;
+    QMenu* viewMenu;
+
+    QList<Style> styles;
 
     QString curFile;
     bool isUntitled;
