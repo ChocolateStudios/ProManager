@@ -55,6 +55,19 @@ void Document::setFontBold(const bool &value)
     selection->querySubObject("Font")->setProperty("Bold", value);
 }
 
+void Document::setParagraphAlignment(WdParagraphAlignment &alignment)
+{
+    if (!isOpen) return;
+    selection->querySubObject("ParagraphFormat")->dynamicCall("SetAlignment(WdParagraphAlignment)", alignment);
+    selection->querySubObject("ParagraphFormat")->setProperty("Alignment", alignment);
+}
+
+QVariant Document::getParagraphAlignment()
+{
+    if (!isOpen) return QVariant();
+    return selection->querySubObject("ParagraphFormat")->dynamicCall("Alignment()");
+}
+
 void Document::close()
 {
     if (!isOpen) return;

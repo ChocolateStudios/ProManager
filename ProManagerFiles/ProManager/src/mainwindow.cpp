@@ -1,9 +1,14 @@
 #include "mainwindow.h"
 #include "word/word.h"
-#include "customtextedit.h"
+
+#include "customs/customtextedit.h"
+#include "customs/customaction.h"
+#include "customs/customcolorfontdialog.h"
+#include "customs/customstylescontextmenu.h"
+
+#include "docks/createstyledock.h"
+
 #include "style.h"
-#include "customaction.h"
-#include "customcolorfontdialog.h"
 
 #include <QtWidgets>
 
@@ -55,7 +60,8 @@ void MainWindow::newFile()
 
 void MainWindow::open()
 {
-    const QString fileName = QFileDialog::getOpenFileName(this);
+    QString selectedFilter = "ProManager files (*.choco)";
+    const QString fileName = QFileDialog::getOpenFileName(this, "Open", QString(), "All files (*.*);; ProManager files (*.choco);; Text Document (*.txt)", &selectedFilter);
     if (!fileName.isEmpty())
         openFile(fileName);
 }
@@ -88,15 +94,32 @@ void MainWindow::openFile(const QString &fileName)
 void MainWindow::loadFile(const QString &fileName)
 {
     QFile file(fileName);
-    if (!file.open(QFile::ReadOnly | QFile::Text)) {
+    if (!file.open(QFile::ReadOnly)) {
         QMessageBox::warning(this, QCoreApplication::applicationName(),tr("Cannot read file %1:\n%2.").arg(QDir::toNativeSeparators(fileName), file.errorString()));
         return;
     }
 
-    QTextStream in(&file);
-    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
-    textEdit->setPlainText(in.readAll());
-    QGuiApplication::restoreOverrideCursor();
+    if (QFileInfo(fileName).suffix() == "choco") {  // If is a ProManager file
+        QDataStream in(&file);
+
+        in.setVersion(QDataStream::Qt_6_1);
+        quint32 magic;
+        in >> magic;
+        if (magic != MagicNumber) {
+            QMessageBox::warning(this, QCoreApplication::applicationName(),tr("The file is not a ProManager file."));
+            return;
+        }
+
+        QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+        textEdit->readData(in);
+        QGuiApplication::restoreOverrideCursor();
+    }
+    else {  // If is a text file
+        QTextStream in(&file);
+        QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+        textEdit->setPlainText(in.readAll());
+        QGuiApplication::restoreOverrideCursor();
+    }
 
     setCurrentFile(fileName);
     statusBar()->showMessage(tr("File loaded"), 2000);
@@ -114,9 +137,17 @@ bool MainWindow::saveFile(const QString &fileName)
 
     QGuiApplication::setOverrideCursor(Qt::WaitCursor);
     QSaveFile file(fileName);
-    if (file.open(QFile::WriteOnly | QFile::Text)) {
-        QTextStream out(&file);
-        out << textEdit->toPlainText();
+    if (file.open(QFile::WriteOnly)) {
+        if (QFileInfo(fileName).suffix() == "choco") {
+            QDataStream out(&file);
+            out.setVersion(QDataStream::Qt_6_1);
+            out << quint32(MagicNumber);
+            textEdit->saveData(out);
+        }
+        else {
+            QTextStream out(&file);
+            out << textEdit->toPlainText();
+        }
         if (!file.commit())
             errorMessage = tr("Cannot write file %1:\n%2.").arg(QDir::toNativeSeparators(fileName), file.errorString());
     }
@@ -141,7 +172,7 @@ void MainWindow::setCurrentFile(const QString &fileName)
 
     isUntitled = fileName.isEmpty();
     if (isUntitled)
-        curFile = tr("document%1.txt").arg(sequenceNumber++);
+        curFile = tr("document%1.choco").arg(sequenceNumber++);
     else
         curFile = QFileInfo(fileName).canonicalFilePath();
 
@@ -228,7 +259,8 @@ bool MainWindow::save()
 
 bool MainWindow::saveAs()
 {
-    QString fileName = QFileDialog::getSaveFileName(this, tr("Save As"), curFile);
+    QString selectedFilter = "ProManager files (*.choco)";
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Save As"), curFile, "All files (*.*);; ProManager files (*.choco);; Text Document (*.txt)", &selectedFilter);
     if (fileName.isEmpty())
         return false;
     return saveFile(fileName);
@@ -236,7 +268,8 @@ bool MainWindow::saveAs()
 
 void MainWindow::download()
 {
-    QString fileName = QFileDialog::getSaveFileName(this, tr("Download"), QFileInfo(curFile).baseName() + ".docx");
+    QString selectedFilter = "Word Document (*.docx)";
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Download"), QFileInfo(curFile).baseName() + ".docx", "All files (*.*);; Word Document (*.docx)", &selectedFilter);
     if (fileName.isEmpty())
         return;
     QGuiApplication::setOverrideCursor(Qt::WaitCursor);
@@ -246,7 +279,7 @@ void MainWindow::download()
     OfficeLib::Word::Document doc = word.createDocument();
 
     // Write text
-    textEdit->writeToWord(doc, styles);
+    textEdit->writeToWord(doc, stylesContextMenu->getStyles());
 
     // Save and close document and Word Application
     doc.saveAs(fileName);
@@ -289,98 +322,25 @@ void MainWindow::documentWasModified()
     setWindowModified(true);
 }
 
-void MainWindow::customContextMenuRequested()
-{
-    customContextMenu->popup(QWidget::mapToGlobal(QPoint(textEdit->cursorRect().right() + 15,textEdit->cursorRect().bottom() + 60)));
-}
-
-void MainWindow::selectStyleIconColor()
-{
-    if (QToolButton* btn = qobject_cast<QToolButton*>(sender())) {
-        QColor c = QColorDialog::getColor();
-        btn->setStyleSheet("border: 1px solid black; background-color: " + c.name() + ";");
-        styles.last().setIconColor(c);
-    }
-}
-
-void MainWindow::selectStyleFont()
-{
-    if (QPushButton* btn = qobject_cast<QPushButton*>(sender())) {
-        bool ok = false;
-        QFont font = QFontDialog::getFont(&ok);
-
-        if (ok) {
-//            qDebug() << font.family();
-//            qDebug() << font.pointSize();
-//            qDebug() << font.pointSizeF();
-//            qDebug() << font.style();
-            styles.last().setFont(font);
-        }
-    }
-}
-
-void MainWindow::selectStyleFontColor()
-{
-    if (QToolButton* btn = qobject_cast<QToolButton*>(sender())) {
-        OfficeLib::Word::WdColor c = CustomColorFontDialog::getColor();
-        QColor c2 = Qt::red;
-        btn->setStyleSheet("border: 1px solid black; background-color: " + c2.name() + ";");
-        styles.last().fontColor = c;
-    }
-}
-
-void MainWindow::addStyleToCustomContextMenu()
-{
-    if (QPushButton* btn = qobject_cast<QPushButton*>(sender())) {
-        if (QLineEdit* ledit = qobject_cast<QLineEdit*>(btn->parent()->children().at(2))) {
-            for (Style &s : styles) {
-                if (s.getName() == ledit->text())
-                    return;
-            }
-
-            styles.last().setName(ledit->text());
-
-            CustomAction* newAct = new CustomAction(styles.last());
-            newAct->setEnabled(!textEdit->textCursor().selectedText().isEmpty());
-
-            connect(newAct, &QAction::triggered, textEdit, &CustomTextEdit::setTextSelectedColor);
-            connect(textEdit, &QTextEdit::copyAvailable, newAct, &QAction::setEnabled);
-
-            customContextMenu->addAction(newAct);
-
-            ledit->clear();
-            btn->parent()->parent()->setProperty("visible", false);
-            styles.append(Style());
-
-            if (!textEdit->textCursor().selectedText().isEmpty())
-                emit newAct->triggered();
-        }
-    }
-}
-
 void MainWindow::init()
 {
     setAttribute(Qt::WA_DeleteOnClose);
     isUntitled = true;
     textEdit = new CustomTextEdit;
+    stylesContextMenu = new CustomStylesContextMenu(textEdit, this);
     setCentralWidget(textEdit);
-
-    styles.append(Style());
-    textEdit->styles = &styles;
 
     createActions();
     createMenus();
     createToolBars();
     createStatusBar();
-    createDockWindows();
-    createContextMenu();
-    createCustomContextMenu();
+    initializeDockWindows();
+
     readSettings();
     connect(textEdit->document(), &QTextDocument::contentsChanged, this, &MainWindow::documentWasModified);
     setUnifiedTitleAndToolBarOnMac(true);
 
     textEdit->initTest();
-//    textEdit->test("AL INICIO JEJE     ", styles);
 }
 
 void MainWindow::createActions()
@@ -460,7 +420,6 @@ void MainWindow::createActions()
     resetSelectedTextFormatAct = new QAction(resetSelectedTextFormatIcon, tr("&Reset Format"), this);
     resetSelectedTextFormatAct->setStatusTip(tr("Reset selected text format"));
     connect(resetSelectedTextFormatAct, &QAction::triggered, textEdit, &CustomTextEdit::resetSelectedTextFormat);
-//    connect(resetSelectedTextFormatAct, &QAction::triggered, textEdit, &CustomTextEdit::test);
     resetSelectedTextFormatAct->setEnabled(false);
     connect(textEdit, &QTextEdit::copyAvailable, resetSelectedTextFormatAct, &QAction::setEnabled);
 
@@ -468,7 +427,13 @@ void MainWindow::createActions()
     showStylesMenuAct = new QAction(showStylesMenuIcon, tr("Show Style Menu"), this);
     showStylesMenuAct->setShortcut(Qt::CTRL | Qt::Key_Space);
     showStylesMenuAct->setStatusTip(tr("Show a menu with styles options"));
-    connect(showStylesMenuAct, &QAction::triggered, this, &MainWindow::customContextMenuRequested);
+    connect(showStylesMenuAct, &QAction::triggered, stylesContextMenu, &CustomStylesContextMenu::customPopup);
+
+    const QIcon toggleAddStyleDockIcon = QIcon(":/images/plus.png");
+    toggleAddStyleDockAct = new QAction(toggleAddStyleDockIcon, tr("Create New Style"), this);
+    toggleAddStyleDockAct->setStatusTip(tr("Create a new format style"));
+    toggleAddStyleDockAct->setCheckable(true);
+    connect(toggleAddStyleDockAct, &QAction::triggered, this, []() { CreateStyleDock::showAndHide(); });
 }
 
 void MainWindow::createMenus()
@@ -510,6 +475,7 @@ void MainWindow::createMenus()
     editMenu->addAction(showStylesMenuAct);
 
     viewMenu = menuBar()->addMenu(tr("&View"));
+    viewMenu->addAction(toggleAddStyleDockAct);
 
     menuBar()->addSeparator();
 
@@ -519,6 +485,8 @@ void MainWindow::createMenus()
 
     QAction *aboutQtAct = helpMenu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
     aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
+
+    stylesContextMenu->setAddStyleAction(toggleAddStyleDockAct);
 }
 
 void MainWindow::createToolBars()
@@ -544,73 +512,9 @@ void MainWindow::createStatusBar()
     statusBar()->showMessage(tr("Ready"));
 }
 
-void MainWindow::createDockWindows()
+void MainWindow::initializeDockWindows()
 {
-    QDockWidget* createStyleDock = new QDockWidget(tr("Create New Style"), this);
-
-    QWidget* widget = new QWidget(createStyleDock);
-    QVBoxLayout* layout = new QVBoxLayout;
-
-    QLabel* styleNameLabel = new QLabel(tr("Style Name"));
-    QLineEdit* styleNameLEdit = new QLineEdit;
-
-    QHBoxLayout* rectColorLayout = new QHBoxLayout;
-    QLabel* rectColorLabel = new QLabel(tr("Style Color"));
-    QToolButton* rectColorBtn = new QToolButton();
-
-    QVBoxLayout* fontPropsLayout = new QVBoxLayout;
-    QLabel* fontLabel = new QLabel(tr("Font Properties"));
-    QHBoxLayout* fontOptionsLayout = new QHBoxLayout;
-    QPushButton* fontBtn = new QPushButton(tr("Font"));
-    QToolButton* rectFontColorBtn = new QToolButton();
-
-    QPushButton* createStyleBtn = new QPushButton("Create");
-
-    connect(rectColorBtn, &QToolButton::clicked, this, &MainWindow::selectStyleIconColor);
-    connect(fontBtn, &QPushButton::clicked, this, &MainWindow::selectStyleFont);
-    connect(rectFontColorBtn, &QPushButton::clicked, this, &MainWindow::selectStyleFontColor);
-    connect(createStyleBtn, &QPushButton::clicked, this, &MainWindow::addStyleToCustomContextMenu);
-
-    layout->addWidget(styleNameLabel);
-    layout->addWidget(styleNameLEdit);
-
-    rectColorLayout->addWidget(rectColorLabel);
-    rectColorLayout->addWidget(rectColorBtn);
-    layout->addLayout(rectColorLayout);
-
-    layout->addStretch(1);
-
-    fontPropsLayout->addWidget(fontLabel);
-    fontOptionsLayout->addWidget(fontBtn);
-    fontOptionsLayout->addWidget(rectFontColorBtn);
-    fontPropsLayout->addLayout(fontOptionsLayout);
-    layout->addLayout(fontPropsLayout);
-
-    layout->addStretch(5);
-
-    layout->addWidget(createStyleBtn);
-    widget->setLayout(layout);
-
-    createStyleDock->setWidget(widget);
-    createStyleDock->setVisible(false);
-    addStyleAct = createStyleDock->toggleViewAction();
-    addDockWidget(Qt::RightDockWidgetArea, createStyleDock);
-    viewMenu->addAction(createStyleDock->toggleViewAction());
-}
-
-void MainWindow::createContextMenu()
-{
-//    QAction* actionName;
-//    textEdit->addAction(actionName);
-//    textEdit->setContextMenuPolicy(Qt::ActionsContextMenu);
-}
-
-void MainWindow::createCustomContextMenu()
-{
-    customContextMenu = new QMenu(this);
-    addStyleAct->setIcon(QIcon(":/images/plus.png"));
-    customContextMenu->addAction(addStyleAct);
-    customContextMenu->addSeparator();
+    CreateStyleDock::Init(stylesContextMenu, this);
 }
 
 void MainWindow::readSettings()

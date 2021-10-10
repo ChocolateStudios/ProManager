@@ -1,8 +1,9 @@
 #ifndef CUSTOMCOLORFONTDIALOG_H
 #define CUSTOMCOLORFONTDIALOG_H
 
-#include <QDialog>
 #include "word/document.h"
+
+#include <QDialog>
 
 class CustomColorFontDialog : public QDialog
 {

@@ -70,6 +70,17 @@ enum WdColor {
     wdColorGray90           = 1644825,
     wdColorGray95           = 789516
 };
+enum WdParagraphAlignment {
+    wdAlignParagraphLeft    = 0,
+    wdAlignParagraphCenter  = 1,
+    wdAlignParagraphRight   = 2,
+    wdAlignParagraphJustify = 3,
+    wdAlignParagraphDistribute= 4,
+    wdAlignParagraphJustifyMed= 5,
+    wdAlignParagraphJustifyHi= 7,
+    wdAlignParagraphJustifyLow= 8,
+    wdAlignParagraphThaiJustify= 9
+};
 
 class Document
 {
@@ -84,6 +95,10 @@ public:
     QVariant getFontColor();
     void setFontName(const QString& font);
     void setFontBold(const bool& value);
+
+    //Paragraph Properties
+    void setParagraphAlignment(WdParagraphAlignment& alignment);
+    QVariant getParagraphAlignment();
 
     void close();
     void save();

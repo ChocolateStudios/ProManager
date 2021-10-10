@@ -4,7 +4,7 @@
 #include <QTextEdit>
 
 namespace OfficeLib { namespace Word {
-class Document;
+    class Document;
 }}
 class Style;
 
@@ -13,16 +13,15 @@ class CustomTextEdit : public QTextEdit
     Q_OBJECT
 public:
     CustomTextEdit();
-    void writeToWord(OfficeLib::Word::Document& wordDocument, QList<Style> &styles);
+    void writeToWord(OfficeLib::Word::Document& wordDocument, const QList<Style> &styles);
     void initTest();
+    void saveData(QDataStream& out);
+    void readData(QDataStream& in);
 
 public slots:
     void setTextSelectedColor();
     void resetSelectedTextFormat();
     void test();
-
-public:
-    QList<Style>* styles;
 };
 
 #endif // CUSTOMTEXTEDIT_H

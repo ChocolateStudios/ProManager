@@ -1,17 +1,19 @@
-#include "customtextedit.h"
+#include "customs/customtextedit.h"
 #include "word/document.h"
 #include "style.h"
+
 #include <QtWidgets>
 
 #include <QAxObject>
 CustomTextEdit::CustomTextEdit()
 {
+    setAcceptRichText(false);
 }
 
 void subFunction(const QColor& col, QTextCursor& cur);
-Style* getStyle(const QColor& col, QList<Style>& styles);
+const Style* getStyle(const QColor& col, const QList<Style>& styles);
 
-void CustomTextEdit::writeToWord(OfficeLib::Word::Document& wordDocument, QList<Style>& styles)
+void CustomTextEdit::writeToWord(OfficeLib::Word::Document& wordDocument, const QList<Style>& styles)
 {
 //    wordDocument.writeText(toPlainText());
     QTextCursor cur(textCursor());
@@ -29,7 +31,7 @@ void CustomTextEdit::writeToWord(OfficeLib::Word::Document& wordDocument, QList<
                 wordDocument.writeText("\n");
             }
 
-            Style* curStyle = getStyle(col, styles);
+            const Style* curStyle = getStyle(col, styles);
             if (curStyle) {
                 subFunction(col, cur);
 
@@ -38,10 +40,16 @@ void CustomTextEdit::writeToWord(OfficeLib::Word::Document& wordDocument, QList<
 
                 QFont font = curStyle->getFont();
 
-                wordDocument.setFontColor(curStyle->fontColor);
+                //Font Properties
+                OfficeLib::Word::WdColor fontColor = curStyle->getFontColor();
+                wordDocument.setFontColor(fontColor);
                 wordDocument.setFontBold(font.bold());
                 wordDocument.setFontName(font.family());
                 wordDocument.setFontSize(font.pointSize());
+
+                //Paragraph Properties
+                OfficeLib::Word::WdParagraphAlignment alignment = OfficeLib::Word::wdAlignParagraphJustify;
+                wordDocument.setParagraphAlignment(alignment);
                 wordDocument.writeText(text);
             }
         }
@@ -55,8 +63,8 @@ void subFunction(const QColor& col, QTextCursor& cur) {
             break;
 }
 
-Style* getStyle(const QColor& col, QList<Style>& styles) {
-    for (Style& s : styles) {
+const Style* getStyle(const QColor& col, const QList<Style>& styles) {
+    for (const Style& s : styles) {
         if (col == s.getIconColor())
             return &s;
     }
@@ -88,6 +96,18 @@ void CustomTextEdit::initTest()
                    "ayudar a los equipos de trabajo y personas que no disponen de los recursos necesarios "
                    "brindándoles una solución para que sigan realizando su labor desde un entorno virtual "
                    "y remoto a través de un producto de software.");
+}
+
+void CustomTextEdit::saveData(QDataStream &out)
+{
+    out << toPlainText();
+}
+
+void CustomTextEdit::readData(QDataStream &in)
+{
+    QString data;
+    in >> data;
+    setPlainText(data);
 }
 
 void CustomTextEdit::test()

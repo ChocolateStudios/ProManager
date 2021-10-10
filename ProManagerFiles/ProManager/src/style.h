@@ -5,24 +5,29 @@
 #include <QColor>
 #include "word/document.h"
 
+class QToolButton;
+
 class Style
 {
+
 public:
     Style();
 
     const QColor &getIconColor() const;
-    void setIconColor(const QColor &newIconColor);
     const QFont &getFont() const;
-    void setFont(const QFont &newFont);
     const QString &getName() const;
-    void setName(const QString &newName);
+    OfficeLib::Word::WdColor getFontColor() const;
 
-    OfficeLib::Word::WdColor fontColor;
+    void setIconColor(QToolButton* button);
+    void setFont();
+    void setName(const QString &newName);
+    void setFontColor(QToolButton* button);
 
 private:
     QColor iconColor;
     QFont font;
     QString name;
+    OfficeLib::Word::WdColor fontColor;
 };
 
 #endif // STYLE_H

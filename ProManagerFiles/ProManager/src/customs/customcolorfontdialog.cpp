@@ -1,4 +1,5 @@
-#include "customcolorfontdialog.h"
+#include "customs/customcolorfontdialog.h"
+
 #include <QGridLayout>
 #include <QPushButton>
 #include <QString>

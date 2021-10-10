@@ -7,6 +7,7 @@ class CustomTextEdit;
 class QAction;
 class QLineEdit;
 class Style;
+class CustomStylesContextMenu;
 
 class MainWindow : public QMainWindow
 {
@@ -31,23 +32,16 @@ private slots:
     void openRecentFile();
     void about();
     void documentWasModified();
-    void customContextMenuRequested();
-    void selectStyleIconColor();
-    void selectStyleFont();
-    void selectStyleFontColor();
-    void addStyleToCustomContextMenu();
 
 private:
-    enum { MaxRecentFiles = 5 };
+    enum { MaxRecentFiles = 5, MagicNumber = 0x4F94C8D3 };
 
     void init();
     void createActions();
     void createMenus();
     void createToolBars();
     void createStatusBar();
-    void createDockWindows();
-    void createContextMenu();
-    void createCustomContextMenu();
+    void initializeDockWindows();
     void readSettings();
     void writeSettings();
     bool maybeSave();
@@ -79,12 +73,11 @@ private:
     QAction *pasteAct;
     QAction *resetSelectedTextFormatAct;
     QAction *showStylesMenuAct;
-    QAction *addStyleAct;
+    QAction *toggleAddStyleDockAct;
 
-    QMenu* customContextMenu;
     QMenu* viewMenu;
 
-    QList<Style> styles;
+    CustomStylesContextMenu* stylesContextMenu;
 
     QString curFile;
     bool isUntitled;
