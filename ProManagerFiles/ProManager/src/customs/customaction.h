@@ -1,8 +1,9 @@
 #ifndef CUSTOMACTION_H
 #define CUSTOMACTION_H
 
+#include "extras/style.h"
+
 #include <QAction>
-#include "style.h"
 
 class Style;
 

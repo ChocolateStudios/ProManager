@@ -1,163 +1,144 @@
 #include "customs/customtextedit.h"
+
 #include "word/document.h"
-#include "style.h"
+#include "extras/style.h"
 
 #include <QtWidgets>
+#include <QString>
 
-#include <QAxObject>
 CustomTextEdit::CustomTextEdit()
 {
     setAcceptRichText(false);
+    setMouseTracking(true);
 }
 
-void subFunction(const QColor& col, QTextCursor& cur);
-const Style* getStyle(const QColor& col, const QList<Style>& styles);
-
-void CustomTextEdit::writeToWord(OfficeLib::Word::Document& wordDocument, const QList<Style>& styles)
+void CustomTextEdit::setStyles(const QList<Style> *stls)
 {
-//    wordDocument.writeText(toPlainText());
+    styles = stls;
+}
+
+void CustomTextEdit::writeToWord(OfficeLib::Word::Document& wordDocument, const QList<Style>& styles, const QList<CustomImage>& importedImages)
+{
     QTextCursor cur(textCursor());
-    cur.movePosition(QTextCursor::End);
-    int finalPos = cur.position();
-    cur.movePosition(QTextCursor::Start);
+    textAnalizer.writeToWord(wordDocument, cur, styles, importedImages,
+        [&](const Style* curStyle) {
 
-    QColor col;
-    do {
-        if (cur.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor)) {
-            col = cur.charFormat().background().color();
+            //Font Properties
+            QFont font = curStyle->getFont();
+            OfficeLib::Word::WdColor fontColor = curStyle->getFontColor();
+            unsigned short headerLevel = curStyle->getHeaderLevel();
 
-            QChar t = cur.selectedText().at(0);
-            if (t == QChar(8233)) {       //Check for enter character (code 8233)
-                wordDocument.writeText("\n");
-            }
+            wordDocument.setHeader(headerLevel);
+            wordDocument.setFontColor(fontColor);
+            wordDocument.setFontBold(font.bold());
+            wordDocument.setFontName(font.family());
+            wordDocument.setFontSize(font.pointSize());
 
-            const Style* curStyle = getStyle(col, styles);
-            if (curStyle) {
-                subFunction(col, cur);
-
-                QString text = cur.selectedText();
-                text.replace(QChar(8233), "\n");
-
-                QFont font = curStyle->getFont();
-
-                //Font Properties
-                OfficeLib::Word::WdColor fontColor = curStyle->getFontColor();
-                wordDocument.setFontColor(fontColor);
-                wordDocument.setFontBold(font.bold());
-                wordDocument.setFontName(font.family());
-                wordDocument.setFontSize(font.pointSize());
-
-                //Paragraph Properties
-                OfficeLib::Word::WdParagraphAlignment alignment = OfficeLib::Word::wdAlignParagraphJustify;
-                wordDocument.setParagraphAlignment(alignment);
-                wordDocument.writeText(text);
-            }
+            //Paragraph Properties
+            OfficeLib::Word::WdParagraphAlignment alignment = OfficeLib::Word::wdAlignParagraphJustify;
+            wordDocument.setParagraphAlignment(alignment);
         }
-        cur.movePosition(QTextCursor::NextCharacter, QTextCursor::MoveAnchor);
-    } while (cur.position() < finalPos);
+    );
 }
 
-void subFunction(const QColor& col, QTextCursor& cur) {
-    while (cur.charFormat().background().color() == col)
-        if (!cur.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor))
-            break;
-}
-
-const Style* getStyle(const QColor& col, const QList<Style>& styles) {
-    for (const Style& s : styles) {
-        if (col == s.getIconColor())
-            return &s;
-    }
-    return nullptr;
-}
-
-void CustomTextEdit::initTest()
+void CustomTextEdit::setNavegationTexts(QStandardItemModel* model, const QStandardItemModel* otherModel)
 {
-    QTextCursor cur(textCursor());
-    cur.insertText("Startup Profile:\n");
-    cur.insertText("A través de los años la tecnología ha ido mejorando y evolucionando "
-                   "a tal grado que en la actualidad la usamos en la vida cotidiana para "
-                   "facilitarnos algunas tareas y resolver problemas.\n");
-    cur.insertText("Con la llegada de la pandemia mundial muchas empresas se han visto "
-                   "perjudicadas. Entre ellos, nuestro equipo se ha percatado de que uno "
-                   "de los sectores que más ha perdido es en el que se encuentran las empresas "
-                   "cuyos empleados requieren del uso de recursos virtuales proporcionados en "
-                   "sus oficinas de trabajo y de un trabajo colaborativo. Esto, debido a que "
-                   "la situación impide que sus empleados puedan acudir a espacios físicos públicos "
-                   "para hacer uso de dichos recursos o reunirse con compañeros de equipo para discutir "
-                   "ideas, planificar su proyecto y realizar un trabajo colaborativo para llevar a "
-                   "cabo su objetivo.\n\n");
-    cur.insertText("Startup Description:\n");
-    cur.insertText("Pollitos FC es un grupo conformado por estudiantes de la carrera de Ingeniería de "
-                   "Software. Diego Alonso Olivera, Jorge Sanchez, Sebastián Sasaki, Diego Henriquez"
-                   " y Andreluis Ingaroca.  Este grupo surge debido a la situación que se ha vivido "
-                   "durante los años 2020 y 2021 por la pandemia mundial, la cual ha perjudicado a "
-                   "muchas empresas y a sus empleados. Nuestro equipo tiene como objetivo principal "
-                   "ayudar a los equipos de trabajo y personas que no disponen de los recursos necesarios "
-                   "brindándoles una solución para que sigan realizando su labor desde un entorno virtual "
-                   "y remoto a través de un producto de software.");
+    textAnalizer.setNavegationTexts(model, otherModel, textCursor());
+}
+
+void CustomTextEdit::updateBackgroundStyleColor(const QString& previousName, const Style& style)
+{
+    textAnalizer.updateBackgroundStyleColor(style, *styles, textCursor(), previousName);
 }
 
 void CustomTextEdit::saveData(QDataStream &out)
 {
     out << toPlainText();
+    textAnalizer.saveData(out);
 }
 
-void CustomTextEdit::readData(QDataStream &in)
+void CustomTextEdit::readData(QDataStream &in, const QList<Style> &styles)
 {
     QString data;
     in >> data;
     setPlainText(data);
+    textAnalizer.readData(in, styles, textCursor());
 }
 
-void CustomTextEdit::test()
+void CustomTextEdit::searchSpecialText()
 {
-//    QTextCursor cur(textCursor());
-//    cur.movePosition(QTextCursor::End);
-//    int finalPos = cur.position();
-//    cur.movePosition(QTextCursor::Start);
+    QTextCursor cur = cursorForPosition(mapFromGlobal(QCursor::pos()));
+    cur.select(QTextCursor::WordUnderCursor);
 
-//    QColor col;
-//    do {
-//        if (cur.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor)) {
-//            QString t = cur.selectedText();
-//            if (t.at(0) == QChar(8233))
-//                qDebug() << "enter";
-//            col = cur.charFormat().background().color();
-//            Style* curStyle = getStyle(col, styles);
-//            if (curStyle) {
-//                subFunction(col, cur);
-//                QString text = cur.selectedText();
-//                qDebug() << curStyle->getColor() << ", " << curStyle->getFont() << ", " << curStyle->getName();
-//                qDebug() << text;
-//            }
-//        }
-//        cur.movePosition(QTextCursor::NextCharacter, QTextCursor::MoveAnchor);
-//    } while (cur.position() < finalPos);
+    if (textAnalizer.containsSpecialText(cur)) {
+        QTextCharFormat charFormat = cur.charFormat();
+        charFormat.setFontUnderline(true);
+        cur.setCharFormat(charFormat);
+        textAnalizer.specialTextSelectedCursor = cur;
+    }
+    else {
+        textAnalizer.restoreOverridedCursor();
+        textAnalizer.removeUnderlinedSpecialText();
+    }
+}
+
+void CustomTextEdit::keyPressEvent(QKeyEvent* event)
+{
+    if (event->key() == Qt::Key_Control) {
+        searchBtnPressed = true;
+    }
+    else if (!event->text().isEmpty()) {
+        QTextCursor cur = textCursor();
+        if (cur.charFormat().background().color() != styles->at(0).getIconColor()) {
+            QTextCharFormat charFormat = cur.charFormat();
+            charFormat.setBackground(styles->at(0).getIconColor());
+            cur.setCharFormat(charFormat);
+            setTextCursor(cur);
+        }
+    }
+    QTextEdit::keyPressEvent(event);
+}
+
+void CustomTextEdit::keyReleaseEvent(QKeyEvent* event)
+{
+    if (event->key() == Qt::Key_Control) {
+        searchBtnPressed = false;
+        textAnalizer.restoreOverridedCursor();
+        textAnalizer.removeUnderlinedSpecialText();
+    }
+    QTextEdit::keyReleaseEvent(event);
+}
+
+void CustomTextEdit::mouseMoveEvent(QMouseEvent* event)
+{
+    if (searchBtnPressed) {
+        searchSpecialText();
+    }
+    QTextEdit::mouseMoveEvent(event);
+}
+
+void CustomTextEdit::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        if (!textAnalizer.specialTextSelectedCursor.selectedText().isEmpty()) {
+            emit specialTextClicked();
+        }
+    }
+    QTextEdit::mousePressEvent(event);
+}
+
+void CustomTextEdit::focusOutEvent(QFocusEvent *event)
+{
+    searchBtnPressed = false;
+    textAnalizer.restoreOverridedCursor();
+    textAnalizer.removeUnderlinedSpecialText();
+    QTextEdit::focusOutEvent(event);
 }
 
 void CustomTextEdit::setTextSelectedColor()
 {
     if (QAction* act = qobject_cast<QAction*>(sender())) {
 
-        QColor col = act->icon().pixmap(100, 100).toImage().pixel(0, 0);
-
-        QTextCharFormat charFormat;
-        charFormat.setBackground(col);
-
-        QTextCursor cur(textCursor());
-        cur.beginEditBlock();
-        cur.setCharFormat(charFormat);
-        cur.endEditBlock();
+        textAnalizer.setTextSelectedColor(textCursor(), *styles, act);
     }
-}
-
-void CustomTextEdit::resetSelectedTextFormat()
-{
-    QTextCharFormat charFormat;
-
-    QTextCursor cur(textCursor());
-    cur.beginEditBlock();
-    cur.setCharFormat(charFormat);
-    cur.endEditBlock();
 }

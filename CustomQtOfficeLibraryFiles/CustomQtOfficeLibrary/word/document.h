@@ -1,10 +1,13 @@
 #ifndef DOCUMENT_H
 #define DOCUMENT_H
 
+#include "picture.h"
+#include "tableofcontents.h"
+#include <QVariant>
+
 class QAxObject;
 class QString;
 class QColor;
-class QVariant;
 
 namespace OfficeLib { namespace Word {
 
@@ -70,35 +73,27 @@ enum WdColor {
     wdColorGray90           = 1644825,
     wdColorGray95           = 789516
 };
-enum WdParagraphAlignment {
-    wdAlignParagraphLeft    = 0,
-    wdAlignParagraphCenter  = 1,
-    wdAlignParagraphRight   = 2,
-    wdAlignParagraphJustify = 3,
-    wdAlignParagraphDistribute= 4,
-    wdAlignParagraphJustifyMed= 5,
-    wdAlignParagraphJustifyHi= 7,
-    wdAlignParagraphJustifyLow= 8,
-    wdAlignParagraphThaiJustify= 9
-};
 
 class Document
 {
 public:
     Document(QAxObject* appObj, QAxObject* docObj);
     ~Document();
+
     void writeText(const QString& text);
 
-    // Font Properties
     void setFontSize(const unsigned short& size);
     void setFontColor(WdColor& color);
     QVariant getFontColor();
     void setFontName(const QString& font);
     void setFontBold(const bool& value);
-
-    //Paragraph Properties
     void setParagraphAlignment(WdParagraphAlignment& alignment);
     QVariant getParagraphAlignment();
+    void setHeader(const unsigned int& headerLevel);
+
+    Picture insertPicture(const QString& filename);
+    TableOfContents insertTableOfContents();
+    QVariant getRange();
 
     void close();
     void save();
@@ -109,6 +104,7 @@ private:
     QAxObject* docObj;
     QAxObject* selection;
     bool isOpen;
+    QVariant shapeIndex = QVariant(0);
 };
 
 }}

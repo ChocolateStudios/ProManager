@@ -1,9 +1,6 @@
 #include "document.h"
-#include <windows.h>
 
 #include <QAxObject>
-#include <QColor>
-#include <QUuid>
 
 namespace OfficeLib { namespace Word {
 
@@ -66,6 +63,39 @@ QVariant Document::getParagraphAlignment()
 {
     if (!isOpen) return QVariant();
     return selection->querySubObject("ParagraphFormat")->dynamicCall("Alignment()");
+}
+
+void Document::setHeader(const unsigned int &headerLevel)
+{
+    if (!isOpen) return;
+    if (headerLevel <= 0)
+        selection->setProperty("Style", "Normal");
+    else
+        selection->setProperty("Style", QString("Heading %1").arg(headerLevel));
+}
+
+Picture Document::insertPicture(const QString &filename)
+{
+    if (!isOpen || filename.isEmpty()) return Picture(nullptr);
+    Picture picture = Picture(docObj->querySubObject("InlineShapes()")->querySubObject("AddPicture(QString&)", filename));
+    selection->dynamicCall("EndKey()");
+    return picture;
+}
+
+TableOfContents Document::insertTableOfContents()
+{
+    if (!isOpen) return TableOfContents(nullptr);
+    QAxObject* range = selection->querySubObject("Range");
+    QAxObject* tablesOfContents = docObj->querySubObject("TablesOfContents");
+
+    return TableOfContents(tablesOfContents->querySubObject("Add(Range*)", range->asVariant()));
+    //tablesOfContents->querySubObject("Add(Word::Range*)", range->asVariant());
+}
+
+QVariant Document::getRange()
+{
+    if (!isOpen) return QVariant();
+    return selection->dynamicCall("Range()");
 }
 
 void Document::close()

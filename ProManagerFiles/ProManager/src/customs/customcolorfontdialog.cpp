@@ -99,7 +99,6 @@ void CustomColorFontDialog::closeEvent(QCloseEvent *event)
 {
     if (!CustomColorFontDialog::selectedColor)
         CustomColorFontDialog::selectedColor = OfficeLib::Word::wdColorAutomatic;
-    qDebug() << CustomColorFontDialog::selectedColor;
     event->accept();
 }
 

@@ -3,6 +3,10 @@
 
 #include <QMainWindow>
 
+#include "extras/resourcescontroller.h"
+
+#include "docks/dockcontroller.h"
+
 class CustomTextEdit;
 class QAction;
 class QLineEdit;
@@ -71,13 +75,20 @@ private:
     QAction *cutAct;
     QAction *copyAct;
     QAction *pasteAct;
-    QAction *resetSelectedTextFormatAct;
     QAction *showStylesMenuAct;
+
+    //Toggle docks view actions
     QAction *toggleAddStyleDockAct;
+    QAction *toggleEditStyleDockAct; //TODO
+    QAction *toggleImagesDockAct;
+    QAction *toggleNavegationDockAct;
+    QAction *toggleFilesDockAct;
 
     QMenu* viewMenu;
 
     CustomStylesContextMenu* stylesContextMenu;
+    ResourcesController resourcesController;
+    DockController dockController;
 
     QString curFile;
     bool isUntitled;

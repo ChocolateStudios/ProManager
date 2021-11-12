@@ -9,6 +9,11 @@
         <file>images/download.png</file>
         <file>images/styles-menu.png</file>
         <file>images/plus.png</file>
-        <file>images/reset-format.png</file>
+        <file>images/picture.png</file>
+        <file>images/edit.png</file>
+        <file>images/navegation.png</file>
+        <file>images/reload.png</file>
+        <file>images/files.png</file>
+        <file>images/word_icon.png</file>
     </qresource>
 </RCC>

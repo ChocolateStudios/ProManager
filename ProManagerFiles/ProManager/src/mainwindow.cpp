@@ -6,11 +6,10 @@
 #include "customs/customcolorfontdialog.h"
 #include "customs/customstylescontextmenu.h"
 
-#include "docks/createstyledock.h"
-
-#include "style.h"
+#include "extras/style.h"
 
 #include <QtWidgets>
+#include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -111,10 +110,13 @@ void MainWindow::loadFile(const QString &fileName)
         }
 
         QGuiApplication::setOverrideCursor(Qt::WaitCursor);
-        textEdit->readData(in);
+        stylesContextMenu->readData(in);
+        textEdit->readData(in, stylesContextMenu->getStyles());
+        resourcesController.readData(in);
         QGuiApplication::restoreOverrideCursor();
     }
-    else {  // If is a text file
+
+    else if (QFileInfo(fileName).suffix() == "txt") {  // If is a text file
         QTextStream in(&file);
         QGuiApplication::setOverrideCursor(Qt::WaitCursor);
         textEdit->setPlainText(in.readAll());
@@ -142,9 +144,11 @@ bool MainWindow::saveFile(const QString &fileName)
             QDataStream out(&file);
             out.setVersion(QDataStream::Qt_6_1);
             out << quint32(MagicNumber);
+            stylesContextMenu->saveData(out);
             textEdit->saveData(out);
+            resourcesController.saveData(out);
         }
-        else {
+        else if (QFileInfo(fileName).suffix() == "txt") {
             QTextStream out(&file);
             out << textEdit->toPlainText();
         }
@@ -279,7 +283,7 @@ void MainWindow::download()
     OfficeLib::Word::Document doc = word.createDocument();
 
     // Write text
-    textEdit->writeToWord(doc, stylesContextMenu->getStyles());
+    textEdit->writeToWord(doc, stylesContextMenu->getStyles(), resourcesController.importedImages);
 
     // Save and close document and Word Application
     doc.saveAs(fileName);
@@ -328,19 +332,18 @@ void MainWindow::init()
     isUntitled = true;
     textEdit = new CustomTextEdit;
     stylesContextMenu = new CustomStylesContextMenu(textEdit, this);
+    textEdit->setStyles(&stylesContextMenu->getStyles());
     setCentralWidget(textEdit);
+    initializeDockWindows();
 
     createActions();
     createMenus();
     createToolBars();
     createStatusBar();
-    initializeDockWindows();
 
     readSettings();
     connect(textEdit->document(), &QTextDocument::contentsChanged, this, &MainWindow::documentWasModified);
     setUnifiedTitleAndToolBarOnMac(true);
-
-    textEdit->initTest();
 }
 
 void MainWindow::createActions()
@@ -416,13 +419,6 @@ void MainWindow::createActions()
     connect(textEdit, &QTextEdit::copyAvailable, copyAct, &QAction::setEnabled);
 #endif // !QT_NO_CLIPBOARD
 
-    const QIcon resetSelectedTextFormatIcon = QIcon(":/images/reset-format.png");
-    resetSelectedTextFormatAct = new QAction(resetSelectedTextFormatIcon, tr("&Reset Format"), this);
-    resetSelectedTextFormatAct->setStatusTip(tr("Reset selected text format"));
-    connect(resetSelectedTextFormatAct, &QAction::triggered, textEdit, &CustomTextEdit::resetSelectedTextFormat);
-    resetSelectedTextFormatAct->setEnabled(false);
-    connect(textEdit, &QTextEdit::copyAvailable, resetSelectedTextFormatAct, &QAction::setEnabled);
-
     const QIcon showStylesMenuIcon = QIcon(":/images/styles-menu.png");
     showStylesMenuAct = new QAction(showStylesMenuIcon, tr("Show Style Menu"), this);
     showStylesMenuAct->setShortcut(Qt::CTRL | Qt::Key_Space);
@@ -432,8 +428,28 @@ void MainWindow::createActions()
     const QIcon toggleAddStyleDockIcon = QIcon(":/images/plus.png");
     toggleAddStyleDockAct = new QAction(toggleAddStyleDockIcon, tr("Create New Style"), this);
     toggleAddStyleDockAct->setStatusTip(tr("Create a new format style"));
-    toggleAddStyleDockAct->setCheckable(true);
-    connect(toggleAddStyleDockAct, &QAction::triggered, this, []() { CreateStyleDock::showAndHide(); });
+    connect(toggleAddStyleDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(CreateStyleDck); });
+
+    const QIcon toggleEditStyleDockIcon = QIcon(":/images/edit.png");
+    toggleEditStyleDockAct = new QAction(toggleEditStyleDockIcon, tr("Edit Style"), this);
+    toggleEditStyleDockAct->setStatusTip(tr("Edit selected style"));
+    connect(toggleEditStyleDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(EditStyleDck); });
+
+    const QIcon toggleImagesDockIcon = QIcon(":/images/picture.png");
+    toggleImagesDockAct = new QAction(toggleImagesDockIcon, tr("Image"), this);
+    toggleImagesDockAct->setStatusTip(tr("Insert and visualize imported images"));
+    connect(toggleImagesDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(ImagesDck); });
+    connect(textEdit, &CustomTextEdit::specialTextClicked, this, [&]() { if (!dockController.showing(ImagesDck)) dockController.showOrHide(ImagesDck); });
+
+    const QIcon toggleNavegationDockIcon = QIcon(":/images/navegation.png");
+    toggleNavegationDockAct = new QAction(toggleNavegationDockIcon, tr("Navegation"), this);
+    toggleNavegationDockAct->setStatusTip(tr("Navegation guide for your document"));
+    connect(toggleNavegationDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(NavegationDck); });
+
+    const QIcon toggleFilesDockIcon = QIcon(":/images/files.png");
+    toggleFilesDockAct = new QAction(toggleFilesDockIcon, tr("Files"), this);
+    toggleFilesDockAct->setStatusTip(tr("Insert and visualize imported files"));
+    connect(toggleFilesDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(FilesDck); });
 }
 
 void MainWindow::createMenus()
@@ -448,6 +464,7 @@ void MainWindow::createMenus()
 #endif
 
     fileMenu->addSeparator();
+
 
     QMenu *recentMenu = fileMenu->addMenu(tr("Recent..."));
     connect(recentMenu, &QMenu::aboutToShow, this, &MainWindow::updateRecentFileActions);
@@ -465,26 +482,34 @@ void MainWindow::createMenus()
     fileMenu->addAction(closeAct);
     fileMenu->addAction(exitAct);
 
+
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
 #ifndef QT_NO_CLIPBOARD
     editMenu->addAction(cutAct);
     editMenu->addAction(copyAct);
     editMenu->addAction(pasteAct);
 #endif
-    editMenu->addAction(resetSelectedTextFormatAct);
     editMenu->addAction(showStylesMenuAct);
+
 
     viewMenu = menuBar()->addMenu(tr("&View"));
     viewMenu->addAction(toggleAddStyleDockAct);
+    viewMenu->addAction(toggleEditStyleDockAct);
+    viewMenu->addAction(toggleImagesDockAct);
+    viewMenu->addAction(toggleNavegationDockAct);
+    viewMenu->addAction(toggleFilesDockAct);
 
     menuBar()->addSeparator();
+
 
     QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
     QAction *aboutAct = helpMenu->addAction(tr("&About"), this, &MainWindow::about);
     aboutAct->setStatusTip(tr("Show the application's About box"));
 
+
     QAction *aboutQtAct = helpMenu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
     aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
+
 
     stylesContextMenu->setAddStyleAction(toggleAddStyleDockAct);
 }
@@ -503,7 +528,6 @@ void MainWindow::createToolBars()
     editToolBar->addAction(copyAct);
     editToolBar->addAction(pasteAct);
 #endif
-    editToolBar->addAction(resetSelectedTextFormatAct);
     editToolBar->addAction(showStylesMenuAct);
 }
 
@@ -514,7 +538,7 @@ void MainWindow::createStatusBar()
 
 void MainWindow::initializeDockWindows()
 {
-    CreateStyleDock::Init(stylesContextMenu, this);
+    dockController.Init(this, stylesContextMenu, &resourcesController.importedImages, &resourcesController.importedFiles, curFile, textEdit);
 }
 
 void MainWindow::readSettings()

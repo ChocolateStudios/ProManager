@@ -1,9 +1,10 @@
 QT -= gui
+QT += axcontainer
 
 TEMPLATE = lib
 CONFIG += staticlib
 
-CONFIG += c++11 qaxcontainer
+CONFIG += c++11
 
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
@@ -12,11 +13,15 @@ CONFIG += c++11 qaxcontainer
 SOURCES += \
     application.cpp \
     word/document.cpp \
+    word/picture.cpp \
+    word/tableofcontents.cpp \
     word/word.cpp
 
 HEADERS += \
     application.h \
     word/document.h \
+    word/picture.h \
+    word/tableofcontents.h \
     word/word.h
 
 # Default rules for deployment.

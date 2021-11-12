@@ -1,28 +1,21 @@
 #ifndef CREATESTYLEDOCK_H
 #define CREATESTYLEDOCK_H
 
-#include <QDockWidget>
+#include "docks/basedock.h"
 
 class CustomStylesContextMenu;
+class CustomPopupButton;
 
-class CreateStyleDock : public QDockWidget
+class CreateStyleDock : public BaseDock
 {
     Q_OBJECT
-public:
-    CreateStyleDock(const CreateStyleDock&) = delete;
-    static void Init(CustomStylesContextMenu* stylesMenu, QMainWindow* win);
-    static void showAndHide();
-
-protected:
-    void closeEvent(QCloseEvent* event) override;
+    friend class DockController;
 
 private:
-    CreateStyleDock(CustomStylesContextMenu* stylesMenu, QMainWindow* mainWin);
+    CreateStyleDock(QMainWindow* mainWin, CustomStylesContextMenu* stylesMenu);
+    CustomStylesContextMenu* stylesContextMenu;
 
-    static CustomStylesContextMenu* stylesContextMenu;
-    static QMainWindow* mainWin;
-    static bool showing;
-    static CreateStyleDock* instance;
+    CustomPopupButton* headerLevelBtn;
 };
 
 #endif // CREATESTYLEDOCK_H
