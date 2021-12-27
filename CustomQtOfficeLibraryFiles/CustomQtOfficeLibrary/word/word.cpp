@@ -10,17 +10,17 @@ Word::Word() : OfficeLib::Application("Word.Application")
 
 }
 
-Document Word::createDocument()
+Document* Word::createDocument()
 {
-    return Document(appObj, appObj->querySubObject("Documents")->querySubObject("Add()"));
+    return new Document(appObj, appObj->querySubObject("Documents")->querySubObject("Add()"));
     //appObj->querySubObject("Documents")->dynamicCall("Add()");
     //return Document(appObj, appObj->querySubObject("ActiveDocument"));
 }
 
-Document Word::openDocument(const QString &fileName)
+Document* Word::openDocument(const QString &fileName)
 {
     appObj->querySubObject("Documents")->dynamicCall("Open(const QString&)", fileName);
-    return Document(appObj, appObj->querySubObject("ActiveDocument"));
+    return new Document(appObj, appObj->querySubObject("ActiveDocument"));
 }
 
 }}

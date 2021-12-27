@@ -1,12 +1,15 @@
 #include "mainwindow.h"
-#include "word/word.h"
 
-#include "customs/customtextedit.h"
-#include "customs/customaction.h"
-#include "customs/customcolorfontdialog.h"
-#include "customs/customstylescontextmenu.h"
+#include "maintabwidget.h"
 
-#include "extras/style.h"
+#include "docks/dockcontroller.h"
+
+#include "resources/manager/resourcesmanager.h"
+
+#include "datastream/readfilestream.h"
+#include "datastream/savefilestream.h"
+
+#include "exporter/exporter.h"
 
 #include <QtWidgets>
 #include <QDebug>
@@ -75,7 +78,7 @@ void MainWindow::openFile(const QString &fileName)
         return;
     }
 
-    if (isUntitled && textEdit->document()->isEmpty() && !isWindowModified()) {
+    if (isUntitled && mainTabWidget->allEditorsEmpty() && !isWindowModified()) {
         loadFile(fileName);
         return;
     }
@@ -98,30 +101,7 @@ void MainWindow::loadFile(const QString &fileName)
         return;
     }
 
-    if (QFileInfo(fileName).suffix() == "choco") {  // If is a ProManager file
-        QDataStream in(&file);
-
-        in.setVersion(QDataStream::Qt_6_1);
-        quint32 magic;
-        in >> magic;
-        if (magic != MagicNumber) {
-            QMessageBox::warning(this, QCoreApplication::applicationName(),tr("The file is not a ProManager file."));
-            return;
-        }
-
-        QGuiApplication::setOverrideCursor(Qt::WaitCursor);
-        stylesContextMenu->readData(in);
-        textEdit->readData(in, stylesContextMenu->getStyles());
-        resourcesController.readData(in);
-        QGuiApplication::restoreOverrideCursor();
-    }
-
-    else if (QFileInfo(fileName).suffix() == "txt") {  // If is a text file
-        QTextStream in(&file);
-        QGuiApplication::setOverrideCursor(Qt::WaitCursor);
-        textEdit->setPlainText(in.readAll());
-        QGuiApplication::restoreOverrideCursor();
-    }
+    ReadFileStream readFile(file, fileName, this);
 
     setCurrentFile(fileName);
     statusBar()->showMessage(tr("File loaded"), 2000);
@@ -137,28 +117,8 @@ bool MainWindow::saveFile(const QString &fileName)
 {
     QString errorMessage;
 
-    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
     QSaveFile file(fileName);
-    if (file.open(QFile::WriteOnly)) {
-        if (QFileInfo(fileName).suffix() == "choco") {
-            QDataStream out(&file);
-            out.setVersion(QDataStream::Qt_6_1);
-            out << quint32(MagicNumber);
-            stylesContextMenu->saveData(out);
-            textEdit->saveData(out);
-            resourcesController.saveData(out);
-        }
-        else if (QFileInfo(fileName).suffix() == "txt") {
-            QTextStream out(&file);
-            out << textEdit->toPlainText();
-        }
-        if (!file.commit())
-            errorMessage = tr("Cannot write file %1:\n%2.").arg(QDir::toNativeSeparators(fileName), file.errorString());
-    }
-    else
-        errorMessage = tr("Cannot open file %1 for writing:\n%2.").arg(QDir::toNativeSeparators(fileName), file.errorString());
-
-    QGuiApplication::restoreOverrideCursor();
+    SaveFileStream saveFile(file, fileName, errorMessage, this);
 
     if (!errorMessage.isEmpty()) {
         QMessageBox::warning(this, QCoreApplication::applicationName(), errorMessage);
@@ -180,7 +140,7 @@ void MainWindow::setCurrentFile(const QString &fileName)
     else
         curFile = QFileInfo(fileName).canonicalFilePath();
 
-    textEdit->document()->setModified(false);
+    mainTabWidget->setModifiersStateToEditors(false);
     setWindowModified(false);
 
     if (!isUntitled && windowFilePath() != curFile)
@@ -270,27 +230,9 @@ bool MainWindow::saveAs()
     return saveFile(fileName);
 }
 
-void MainWindow::download()
+void MainWindow::exportTo()
 {
-    QString selectedFilter = "Word Document (*.docx)";
-    QString fileName = QFileDialog::getSaveFileName(this, tr("Download"), QFileInfo(curFile).baseName() + ".docx", "All files (*.*);; Word Document (*.docx)", &selectedFilter);
-    if (fileName.isEmpty())
-        return;
-    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
-
-    // Open Word Application and create new document
-    OfficeLib::Word::Word word;
-    OfficeLib::Word::Document doc = word.createDocument();
-
-    // Write text
-    textEdit->writeToWord(doc, stylesContextMenu->getStyles(), resourcesController.importedImages);
-
-    // Save and close document and Word Application
-    doc.saveAs(fileName);
-    doc.close();
-    word.quit();
-
-    QGuiApplication::restoreOverrideCursor();
+    Exporter exporter(this);
 }
 
 void MainWindow::updateRecentFileActions()
@@ -330,19 +272,27 @@ void MainWindow::init()
 {
     setAttribute(Qt::WA_DeleteOnClose);
     isUntitled = true;
-    textEdit = new CustomTextEdit;
-    stylesContextMenu = new CustomStylesContextMenu(textEdit, this);
-    textEdit->setStyles(&stylesContextMenu->getStyles());
-    setCentralWidget(textEdit);
-    initializeDockWindows();
+
+    resourcesManager = new ResourcesManager();
+    mainTabWidget = new MainTabWidget(this);
 
     createActions();
     createMenus();
     createToolBars();
     createStatusBar();
 
+    mainTabWidget->connectMainWinActions();
+
+    dockController = new DockController(this);
+    mainTabWidget->setOtherParameters();
+
+    mainTabWidget->stylesContextMenu->addAction(dockController->getAddStyleAction());
+    mainTabWidget->stylesContextMenu->addSeparator();
+    mainTabWidget->stylesContextMenu->addStyle(StyleResource(tr("Comment"), Qt::white));
+
+    setCentralWidget(mainTabWidget);
+
     readSettings();
-    connect(textEdit->document(), &QTextDocument::contentsChanged, this, &MainWindow::documentWasModified);
     setUnifiedTitleAndToolBarOnMac(true);
 }
 
@@ -373,13 +323,13 @@ void MainWindow::createActions()
     connect(saveAsAct, &QAction::triggered, this, &MainWindow::saveAs);
 
 
-    const QIcon downloadIcon = QIcon::fromTheme("document-download", QIcon(":/images/download.png"));
-    downloadAct = new QAction(downloadIcon, tr("&Download"), this);
+    const QIcon exportIcon = QIcon::fromTheme("document-download", QIcon(":/images/download.png"));
+    exportAct = new QAction(exportIcon, tr("&Export"), this);
 #ifdef Q_OS_WINDOWS
-    downloadAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    exportAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
 #endif
-    downloadAct->setStatusTip(tr("Download the document in the specified path"));
-    connect(downloadAct, &QAction::triggered, this, &MainWindow::download);
+    exportAct->setStatusTip(tr("Export the documents in the specified path"));
+    connect(exportAct, &QAction::triggered, this, &MainWindow::exportTo);
 
     const QIcon closeIcon = QIcon::fromTheme("application-close");
     closeAct = new QAction(closeIcon, tr("Close"), this);
@@ -399,57 +349,65 @@ void MainWindow::createActions()
     cutAct = new QAction(cutIcon, tr("Cu&t"), this);
     cutAct->setShortcuts(QKeySequence::Cut);
     cutAct->setStatusTip(tr("Cut the current selection's contents to the clipboard"));
-    connect(cutAct, &QAction::triggered, textEdit, &QTextEdit::cut);
 
     const QIcon copyIcon = QIcon::fromTheme("edit-copy", QIcon(":/images/copy.png"));
     copyAct = new QAction(copyIcon, tr("&Copy"), this);
     copyAct->setShortcuts(QKeySequence::Copy);
     copyAct->setStatusTip(tr("Copy the current selection's contents to the clipboard"));
-    connect(copyAct, &QAction::triggered, textEdit, &QTextEdit::copy);
 
     const QIcon pasteIcon = QIcon::fromTheme("edit-paste", QIcon(":/images/paste.png"));
     pasteAct = new QAction(pasteIcon, tr("&Paste"), this);
     pasteAct->setShortcuts(QKeySequence::Paste);
     pasteAct->setStatusTip(tr("Paste the clipboard's contents into the current selection"));
-    connect(pasteAct, &QAction::triggered, textEdit, &QTextEdit::paste);
 
-    cutAct->setEnabled(false);
-    copyAct->setEnabled(false);
-    connect(textEdit, &QTextEdit::copyAvailable, cutAct, &QAction::setEnabled);
-    connect(textEdit, &QTextEdit::copyAvailable, copyAct, &QAction::setEnabled);
+//    cutAct->setEnabled(false);
+//    copyAct->setEnabled(false);
+    cutAct->setEnabled(true);
+    copyAct->setEnabled(true);
 #endif // !QT_NO_CLIPBOARD
 
     const QIcon showStylesMenuIcon = QIcon(":/images/styles-menu.png");
     showStylesMenuAct = new QAction(showStylesMenuIcon, tr("Show Style Menu"), this);
     showStylesMenuAct->setShortcut(Qt::CTRL | Qt::Key_Space);
     showStylesMenuAct->setStatusTip(tr("Show a menu with styles options"));
-    connect(showStylesMenuAct, &QAction::triggered, stylesContextMenu, &CustomStylesContextMenu::customPopup);
+    connect(showStylesMenuAct, &QAction::triggered, mainTabWidget->stylesContextMenu, &StylesContextMenu::popupInSelection);
 
-    const QIcon toggleAddStyleDockIcon = QIcon(":/images/plus.png");
-    toggleAddStyleDockAct = new QAction(toggleAddStyleDockIcon, tr("Create New Style"), this);
-    toggleAddStyleDockAct->setStatusTip(tr("Create a new format style"));
-    connect(toggleAddStyleDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(CreateStyleDck); });
+    const QIcon insertTableIcon = QIcon(":/images/table.png");
+    insertTableAct = new QAction(insertTableIcon, tr("New Table"), this);
+    insertTableAct->setShortcut(Qt::CTRL | Qt::Key_T);
+    insertTableAct->setStatusTip(tr("Insert a table"));
 
-    const QIcon toggleEditStyleDockIcon = QIcon(":/images/edit.png");
-    toggleEditStyleDockAct = new QAction(toggleEditStyleDockIcon, tr("Edit Style"), this);
-    toggleEditStyleDockAct->setStatusTip(tr("Edit selected style"));
-    connect(toggleEditStyleDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(EditStyleDck); });
+    const QIcon insertColumnRightInTableIcon = QIcon(":/images/insertRightColumn.png");
+    insertColumnRightInTableAct = new QAction(insertColumnRightInTableIcon, tr("Insert Column Right"), this);
+    insertColumnRightInTableAct->setStatusTip(tr("Insert a new column to the right of the current column"));
 
-    const QIcon toggleImagesDockIcon = QIcon(":/images/picture.png");
-    toggleImagesDockAct = new QAction(toggleImagesDockIcon, tr("Image"), this);
-    toggleImagesDockAct->setStatusTip(tr("Insert and visualize imported images"));
-    connect(toggleImagesDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(ImagesDck); });
-    connect(textEdit, &CustomTextEdit::specialTextClicked, this, [&]() { if (!dockController.showing(ImagesDck)) dockController.showOrHide(ImagesDck); });
+    const QIcon insertColumnLeftInTableIcon = QIcon(":/images/insertLeftColumn.png");
+    insertColumnLeftInTableAct = new QAction(insertColumnLeftInTableIcon, tr("Insert Column Left"), this);
+    insertColumnLeftInTableAct->setStatusTip(tr("Insert a new column to the left of the current column"));
 
-    const QIcon toggleNavegationDockIcon = QIcon(":/images/navegation.png");
-    toggleNavegationDockAct = new QAction(toggleNavegationDockIcon, tr("Navegation"), this);
-    toggleNavegationDockAct->setStatusTip(tr("Navegation guide for your document"));
-    connect(toggleNavegationDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(NavegationDck); });
+    const QIcon insertRowDownInTableIcon = QIcon(":/images/insertRowDown.png");
+    insertRowDownInTableAct = new QAction(insertRowDownInTableIcon, tr("Insert Row Below"), this);
+    insertRowDownInTableAct->setStatusTip(tr("Insert a new row below of the current row"));
 
-    const QIcon toggleFilesDockIcon = QIcon(":/images/files.png");
-    toggleFilesDockAct = new QAction(toggleFilesDockIcon, tr("Files"), this);
-    toggleFilesDockAct->setStatusTip(tr("Insert and visualize imported files"));
-    connect(toggleFilesDockAct, &QAction::triggered, this, [&]() { dockController.showOrHide(FilesDck); });
+    const QIcon insertRowUpInTableIcon = QIcon(":/images/insertRowUp.png");
+    insertRowUpInTableAct = new QAction(insertRowUpInTableIcon, tr("Insert Row Above"), this);
+    insertRowUpInTableAct->setStatusTip(tr("Insert a new row above of the current row"));
+
+    const QIcon removeTableIcon = QIcon(":/images/removeTable.png");
+    removeTableAct = new QAction(removeTableIcon, tr("Remove Table"), this);
+    removeTableAct->setStatusTip(tr("Remove current table"));
+
+    const QIcon removeCurrentColumnInTableIcon = QIcon(":/images/removeColumn.png");
+    removeCurrentColumnInTableAct = new QAction(removeCurrentColumnInTableIcon, tr("Remove Column"), this);
+    removeCurrentColumnInTableAct->setStatusTip(tr("Remove current column"));
+
+    const QIcon removeCurrentRowInTableIcon = QIcon(":/images/removeRow.png");
+    removeCurrentRowInTableAct = new QAction(removeCurrentRowInTableIcon, tr("Remove Row"), this);
+    removeCurrentRowInTableAct->setStatusTip(tr("Remove current row"));
+
+    showCharactersIndex = new QAction(tr("Show characters index"), this);
+    showCharactersIndex->setStatusTip(tr("Show characters index"));
+    connect(showCharactersIndex, &QAction::triggered, mainTabWidget, &MainTabWidget::showCharactersIndexInActiveEditor);
 }
 
 void MainWindow::createMenus()
@@ -460,7 +418,7 @@ void MainWindow::createMenus()
     fileMenu->addAction(saveAct);
     fileMenu->addAction(saveAsAct);
 #ifdef Q_OS_WINDOWS
-    fileMenu->addAction(downloadAct);
+    fileMenu->addAction(exportAct);
 #endif
 
     fileMenu->addSeparator();
@@ -482,6 +440,16 @@ void MainWindow::createMenus()
     fileMenu->addAction(closeAct);
     fileMenu->addAction(exitAct);
 
+    insertMenu = menuBar()->addMenu(tr("Insert"));
+    insertMenu->addAction(insertTableAct);
+    insertMenu->addAction(insertColumnRightInTableAct);
+    insertMenu->addAction(insertColumnLeftInTableAct);
+    insertMenu->addAction(insertRowDownInTableAct);
+    insertMenu->addAction(insertRowUpInTableAct);
+    insertMenu->addAction(removeTableAct);
+    insertMenu->addAction(removeCurrentColumnInTableAct);
+    insertMenu->addAction(removeCurrentRowInTableAct);
+
 
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
 #ifndef QT_NO_CLIPBOARD
@@ -493,11 +461,6 @@ void MainWindow::createMenus()
 
 
     viewMenu = menuBar()->addMenu(tr("&View"));
-    viewMenu->addAction(toggleAddStyleDockAct);
-    viewMenu->addAction(toggleEditStyleDockAct);
-    viewMenu->addAction(toggleImagesDockAct);
-    viewMenu->addAction(toggleNavegationDockAct);
-    viewMenu->addAction(toggleFilesDockAct);
 
     menuBar()->addSeparator();
 
@@ -509,9 +472,6 @@ void MainWindow::createMenus()
 
     QAction *aboutQtAct = helpMenu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
     aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
-
-
-    stylesContextMenu->setAddStyleAction(toggleAddStyleDockAct);
 }
 
 void MainWindow::createToolBars()
@@ -520,7 +480,7 @@ void MainWindow::createToolBars()
     fileToolBar->addAction(newAct);
     fileToolBar->addAction(openAct);
     fileToolBar->addAction(saveAct);
-    fileToolBar->addAction(downloadAct);
+    fileToolBar->addAction(exportAct);
 
     QToolBar *editToolBar = addToolBar(tr("Edit"));
 #ifndef QT_NO_CLIPBOARD
@@ -529,16 +489,12 @@ void MainWindow::createToolBars()
     editToolBar->addAction(pasteAct);
 #endif
     editToolBar->addAction(showStylesMenuAct);
+    editToolBar->addAction(showCharactersIndex);
 }
 
 void MainWindow::createStatusBar()
 {
     statusBar()->showMessage(tr("Ready"));
-}
-
-void MainWindow::initializeDockWindows()
-{
-    dockController.Init(this, stylesContextMenu, &resourcesController.importedImages, &resourcesController.importedFiles, curFile, textEdit);
 }
 
 void MainWindow::readSettings()
@@ -563,16 +519,11 @@ void MainWindow::writeSettings()
 
 bool MainWindow::maybeSave()
 {
-    if (!textEdit->document()->isModified())
-        return true;
-    const QMessageBox::StandardButton ret = QMessageBox::warning(this, QCoreApplication::applicationName(), tr("The document has been modified.\nDo you want to save your changes?"), QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
-    switch(ret) {
-    case QMessageBox::Save:
+    switch (mainTabWidget->maybeSave()) {
+    case 1:
         return save();
-    case QMessageBox::Cancel:
+    case 2:
         return false;
-    default:
-        break;
     }
     return true;
 }

@@ -10,8 +10,8 @@ class Word : public Application
 {
 public:
     Word();
-    Document createDocument();
-    Document openDocument(const QString& fileName);
+    Document* createDocument();
+    Document* openDocument(const QString& fileName);
 };
 
 }}

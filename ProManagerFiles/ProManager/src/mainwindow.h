@@ -3,20 +3,19 @@
 
 #include <QMainWindow>
 
-#include "extras/resourcescontroller.h"
-
-#include "docks/dockcontroller.h"
-
-class CustomTextEdit;
 class QAction;
-class QLineEdit;
-class Style;
-class CustomStylesContextMenu;
+class DockController;
+class MainTabWidget;
+class ResourcesManager;
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
-
+    friend class ReadFileStream;
+    friend class SaveFileStream;
+    friend class MainTabWidget;
+    friend class DockController;
+    friend class Exporter;
 public:
     MainWindow(QWidget *parent = nullptr);
     explicit MainWindow(const QString& fileName);
@@ -31,10 +30,12 @@ private slots:
     void open();
     bool save();
     bool saveAs();
-    void download();
+    void exportTo();
     void updateRecentFileActions();
     void openRecentFile();
     void about();
+
+public slots:
     void documentWasModified();
 
 private:
@@ -45,7 +46,6 @@ private:
     void createMenus();
     void createToolBars();
     void createStatusBar();
-    void initializeDockWindows();
     void readSettings();
     void writeSettings();
     bool maybeSave();
@@ -59,8 +59,6 @@ private:
     static QString strippedName(const QString& fullFileName);
     MainWindow *findMainWindow(const QString& fileName) const;
 
-    CustomTextEdit *textEdit;
-
     QAction* recentFileActs[MaxRecentFiles];
     QAction* recentFileSeparator;
     QAction* recentFileSubMenuAct;
@@ -69,7 +67,7 @@ private:
     QAction *openAct;
     QAction *saveAct;
     QAction *saveAsAct;
-    QAction *downloadAct;
+    QAction *exportAct;
     QAction *closeAct;
     QAction *exitAct;
     QAction *cutAct;
@@ -77,20 +75,26 @@ private:
     QAction *pasteAct;
     QAction *showStylesMenuAct;
 
-    //Toggle docks view actions
-    QAction *toggleAddStyleDockAct;
-    QAction *toggleEditStyleDockAct; //TODO
-    QAction *toggleImagesDockAct;
-    QAction *toggleNavegationDockAct;
-    QAction *toggleFilesDockAct;
+    QAction *insertTableAct;
+    QAction *insertColumnRightInTableAct;
+    QAction *insertColumnLeftInTableAct;
+    QAction *insertRowDownInTableAct;
+    QAction *insertRowUpInTableAct;
+    QAction *removeTableAct;
+    QAction *removeCurrentColumnInTableAct;
+    QAction *removeCurrentRowInTableAct;
 
+    QAction *showCharactersIndex;
+
+    QMenu* insertMenu;
     QMenu* viewMenu;
-
-    CustomStylesContextMenu* stylesContextMenu;
-    ResourcesController resourcesController;
-    DockController dockController;
 
     QString curFile;
     bool isUntitled;
+
+public:
+    MainTabWidget* mainTabWidget;
+    DockController* dockController;
+    ResourcesManager* resourcesManager;
 };
 #endif // MAINWINDOW_H

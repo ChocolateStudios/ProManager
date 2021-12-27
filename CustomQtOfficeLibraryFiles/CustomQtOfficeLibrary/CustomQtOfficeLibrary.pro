@@ -12,17 +12,33 @@ CONFIG += c++11
 
 SOURCES += \
     application.cpp \
+    excel/excel.cpp \
+    ppt/powerpoint.cpp \
     word/document.cpp \
+    word/font.cpp \
     word/picture.cpp \
+    word/rangeinserter.cpp \
+    word/selectioninserter.cpp \
+    word/table.cpp \
     word/tableofcontents.cpp \
     word/word.cpp
 
 HEADERS += \
     application.h \
+    excel/excel.h \
+    ppt/powerpoint.h \
     word/document.h \
+    word/font.h \
+    word/inserter.h \
+    word/margin.h \
     word/picture.h \
+    word/rangeinserter.h \
+    word/selectioninserter.h \
+    word/table.h \
     word/tableofcontents.h \
-    word/word.h
+    word/word.h \
+    word/wordcolorfontslist.h \
+    word/wordenums.h
 
 # Default rules for deployment.
 unix {

@@ -8,12 +8,25 @@
         <file>images/save.png</file>
         <file>images/download.png</file>
         <file>images/styles-menu.png</file>
-        <file>images/plus.png</file>
-        <file>images/picture.png</file>
-        <file>images/edit.png</file>
-        <file>images/navegation.png</file>
         <file>images/reload.png</file>
-        <file>images/files.png</file>
         <file>images/word_icon.png</file>
+        <file>images/file-editor.png</file>
+        <file>images/insertLeftColumn.png</file>
+        <file>images/insertRightColumn.png</file>
+        <file>images/insertRowDown.png</file>
+        <file>images/insertRowUp.png</file>
+        <file>images/table.png</file>
+        <file>images/removeColumn.png</file>
+        <file>images/removeRow.png</file>
+        <file>images/splash-01.png</file>
+        <file>images/removeTable.png</file>
+        <file>images/dock-0.png</file>
+        <file>images/dock-1.png</file>
+        <file>images/dock-2.png</file>
+        <file>images/dock-3.png</file>
+        <file>images/dock-4.png</file>
+        <file>images/dock-5.png</file>
+        <file>images/excel_icon.png</file>
+        <file>images/ppt_icon.png</file>
     </qresource>
 </RCC>
